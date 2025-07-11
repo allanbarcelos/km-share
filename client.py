@@ -56,6 +56,7 @@ while True:
                 try:
                     coords = data[5:].split(',')
                     x, y = int(coords[0]), int(coords[1])
+                    print(f"[Windows] Recebido MOVE para ({x}, {y})")
                     pyautogui.moveTo(x, y)
 
                     # Detecta se saiu da tela (para retornar ao Mac)

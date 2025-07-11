@@ -4,6 +4,10 @@ import struct
 from threading import Thread, Lock
 import time
 
+# Configuração de segurança
+pyautogui.FAILSAFE = False  # Desativa o fail-safe (use com cautela!)
+SAFE_BORDER = 50  # Margem de segurança para evitar cantos
+
 HOST = '0.0.0.0'
 PORT = 5000
 ENTRY_BORDER = 'right'
@@ -19,8 +23,10 @@ class MouseController:
         
     def update_position(self, x, y):
         with self.lock:
-            self.x = x
-            self.y = y
+            # Verifica limites seguros
+            screen_width, screen_height = pyautogui.size()
+            self.x = max(SAFE_BORDER, min(x, screen_width - SAFE_BORDER))
+            self.y = max(SAFE_BORDER, min(y, screen_height - SAFE_BORDER))
             
     def update_button(self, button, state):
         with self.lock:
@@ -42,20 +48,24 @@ class MouseController:
             if self.active:
                 x, y, curr_states = self.get_state()
                 
-                # Movimento
+                # Movimento seguro
                 try:
-                    pyautogui.moveTo(x, y)
-                except:
-                    pass
+                    pyautogui.moveTo(x, y, _pause=False)
+                except Exception as e:
+                    print(f"[Erro] Movimento: {e}")
                 
                 # Cliques
                 for btn in ['left', 'right', 'middle']:
                     if curr_states[btn] != prev_states[btn]:
-                        if curr_states[btn]:
-                            pyautogui.mouseDown(button=btn)
-                        else:
-                            pyautogui.mouseUp(button=btn)
-                        prev_states[btn] = curr_states[btn]
+                        try:
+                            if curr_states[btn]:
+                                pyautogui.mouseDown(button=btn, _pause=False)
+                            else:
+                                pyautogui.mouseUp(button=btn, _pause=False)
+                        except Exception as e:
+                            print(f"[Erro] Clique {btn}: {e}")
+                        finally:
+                            prev_states[btn] = curr_states[btn]
             
             time.sleep(0.001)
 
@@ -101,26 +111,36 @@ try:
         if msg_type == 0:  # EXIT_REMOTE
             remote_mode = False
             controller.active = False
+            print("[Windows] Modo remoto desativado")
         elif msg_type == 1:  # ENTER_REMOTE
             remote_mode = True
             controller.active = True
+            print("[Windows] Modo remoto ativado")
         elif msg_type == 2 and remote_mode:  # MOVE
-            x, y = struct.unpack('!HH', data[1:5])
-            controller.update_position(x, y)
-            
-            # Verifica bordas
-            screenWidth, screenHeight = pyautogui.size()
-            if (ENTRY_BORDER == "left" and x <= 0) or \
-               (ENTRY_BORDER == "right" and x >= screenWidth - 1) or \
-               (ENTRY_BORDER == "top" and y <= 0) or \
-               (ENTRY_BORDER == "bottom" and y >= screenHeight - 1):
-                sock.sendto(b"\x00", mac_addr)
+            try:
+                x, y = struct.unpack('!HH', data[1:5])
+                controller.update_position(x, y)
+                
+                # Verifica bordas com margem de segurança
+                screen_width, screen_height = pyautogui.size()
+                if (ENTRY_BORDER == "left" and x <= SAFE_BORDER) or \
+                   (ENTRY_BORDER == "right" and x >= screen_width - SAFE_BORDER) or \
+                   (ENTRY_BORDER == "top" and y <= SAFE_BORDER) or \
+                   (ENTRY_BORDER == "bottom" and y >= screen_height - SAFE_BORDER):
+                    sock.sendto(b"\x00", mac_addr)
+            except Exception as e:
+                print(f"[Erro] Movimento recebido: {e}")
         elif msg_type == 3 and remote_mode:  # CLICK
-            button, state = struct.unpack('!BB', data[1:3])
-            controller.update_button(button, state)
+            try:
+                button, state = struct.unpack('!BB', data[1:3])
+                controller.update_button(button, state)
+            except Exception as e:
+                print(f"[Erro] Clique recebido: {e}")
             
 except KeyboardInterrupt:
     print("\n[Windows] Desligando...")
+except Exception as e:
+    print(f"[Erro Fatal] {e}")
 finally:
     controller.running = False
     mouse_thread.join()

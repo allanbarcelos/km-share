@@ -10,7 +10,7 @@ import Quartz
 from pynput import keyboard
 
 # Configuracoes
-WINDOWS_HOST = '192.168.0.100'  # IP do Windows
+WINDOWS_HOST = '192.168.8.108'  # IP do Windows
 PORT = 5000
 EXIT_BORDER = 'left'  # "left", "right", "top", "bottom"
 

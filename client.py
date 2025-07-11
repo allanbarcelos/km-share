@@ -10,7 +10,7 @@ import sys
 
 HOST = '0.0.0.0'
 PORT = 5000
-ENTRY_BORDER = 'left'  # onde "sai" para o Mac
+ENTRY_BORDER = 'right'  # onde "sai" para o Mac
 
 def get_local_ip():
     try:

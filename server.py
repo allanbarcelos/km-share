@@ -1,28 +1,20 @@
-# --------------------
 # MAC (Servidor)
-# --------------------
-# Requisitos:
-# pip install pynput pyobjc
-
 import socket
 import time
 import Quartz
 from pynput import keyboard
 from AppKit import NSCursor
 
-# Configurações
-WINDOWS_HOST = '192.168.8.108'  # IP do Windows
+WINDOWS_HOST = '192.168.8.108'
 PORT = 5000
-EXIT_BORDER = 'left'  # "left", "right", "top", "bottom"
+EXIT_BORDER = 'left'
 
-# Tela principal
 screen = Quartz.CGDisplayBounds(Quartz.CGMainDisplayID())
 SCREEN_WIDTH = int(screen.size.width)
 SCREEN_HEIGHT = int(screen.size.height)
 
 REMOTE_MODE = False
 
-# Socket TCP para enviar eventos
 sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 sock.connect((WINDOWS_HOST, PORT))
 
@@ -36,7 +28,7 @@ def on_key_press(key):
     if key == keyboard.Key.esc and REMOTE_MODE:
         print("[Mac] Saindo do modo remoto")
         REMOTE_MODE = False
-        NSCursor.unhide()  # Restaurar cursor
+        NSCursor.unhide()
         Quartz.CGWarpMouseCursorPosition((SCREEN_WIDTH - 2, SCREEN_HEIGHT // 2))
         sock.sendall(b"EXIT_REMOTE\n")
 
@@ -58,20 +50,21 @@ while True:
                 print("[Mac] Entrando em modo remoto")
                 REMOTE_MODE = True
                 sock.sendall(b"ENTER_REMOTE\n")
-                NSCursor.hide()  # Ocultar cursor
-                time.sleep(0.1)  # tempo para o Windows ajustar o mouse
+                NSCursor.hide()
+                time.sleep(0.1)
         else:
-            # Envia coordenadas
-            msg = f"MOVE:{x},{y}\n"
+            # Normaliza coordenadas (0 a 1)
+            norm_x = x / SCREEN_WIDTH
+            norm_y = y / SCREEN_HEIGHT
+            msg = f"MOVE_NORM:{norm_x:.4f},{norm_y:.4f}\n"
             sock.sendall(msg.encode())
 
-            # Verifica se recebeu comando de retorno do Windows
             sock.settimeout(0.001)
             try:
                 data = sock.recv(1024).decode().strip()
                 if data == "RETURN_CONTROL":
                     REMOTE_MODE = False
-                    NSCursor.unhide()  # Restaurar cursor
+                    NSCursor.unhide()
                     Quartz.CGWarpMouseCursorPosition((SCREEN_WIDTH - 2, SCREEN_HEIGHT // 2))
                     print("[Mac] Controle retornado pelo Windows")
             except socket.timeout:

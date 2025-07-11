@@ -17,6 +17,7 @@ SCREEN_HEIGHT = int(screen.size.height)
 
 REMOTE_MODE = False
 MAC_CLICK_STATE = {'left': False, 'right': False, 'middle': False}
+SCROLL_ACCUMULATOR = 0  # Acumula eventos de scroll
 
 # Socket UDP
 sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -45,13 +46,26 @@ def on_click(x, y, button, pressed):
         
         if btn_code:
             MAC_CLICK_STATE[button.name] = pressed
-            # Envia: Tipo 3 (clique) | Botão | Estado (1=pressed, 0=released)
             packed_data = struct.pack('!BBB', 3, btn_code, int(pressed))
+            sock.sendto(packed_data, (WINDOWS_HOST, PORT))
+
+def on_scroll(x, y, dx, dy):
+    global SCROLL_ACCUMULATOR
+    if REMOTE_MODE:
+        # Acumula os valores de scroll (dy é vertical, dx é horizontal)
+        SCROLL_ACCUMULATOR += dy * 10  # Amplifica um pouco o scroll
+        
+        # Se acumulou o suficiente, envia
+        if abs(SCROLL_ACCUMULATOR) >= 1:
+            scroll_amount = int(SCROLL_ACCUMULATOR)
+            SCROLL_ACCUMULATOR -= scroll_amount
+            # Envia: Tipo 4 (scroll) | Valor (2 bytes)
+            packed_data = struct.pack('!Bh', 4, scroll_amount)
             sock.sendto(packed_data, (WINDOWS_HOST, PORT))
 
 # Listeners
 keyboard_listener = keyboard.Listener(on_press=on_key_press)
-mouse_listener = mouse.Listener(on_click=on_click)
+mouse_listener = mouse.Listener(on_click=on_click, on_scroll=on_scroll)
 keyboard_listener.start()
 mouse_listener.start()
 
@@ -71,11 +85,9 @@ while True:
                 sock.sendto(b"\x01", (WINDOWS_HOST, PORT))
                 time.sleep(0.1)
         else:
-            # Envia coordenadas (Tipo 2) + X/Y
             packed_data = struct.pack('!BHH', 2, x, y)
             sock.sendto(packed_data, (WINDOWS_HOST, PORT))
 
-        # Verificação de retorno
         try:
             sock.settimeout(0.001)
             data, addr = sock.recvfrom(1024)

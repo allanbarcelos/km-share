@@ -5,8 +5,8 @@ from threading import Thread, Lock
 import time
 
 # Configuração de segurança
-pyautogui.FAILSAFE = False  # Desativa o fail-safe (use com cautela!)
-SAFE_BORDER = 50  # Margem de segurança para evitar cantos
+pyautogui.FAILSAFE = False
+SAFE_BORDER = 50
 
 HOST = '0.0.0.0'
 PORT = 5000
@@ -20,10 +20,10 @@ class MouseController:
         self.lock = Lock()
         self.running = True
         self.button_states = {'left': False, 'right': False, 'middle': False}
+        self.scroll_queue = []
         
     def update_position(self, x, y):
         with self.lock:
-            # Verifica limites seguros
             screen_width, screen_height = pyautogui.size()
             self.x = max(SAFE_BORDER, min(x, screen_width - SAFE_BORDER))
             self.y = max(SAFE_BORDER, min(y, screen_height - SAFE_BORDER))
@@ -37,18 +37,24 @@ class MouseController:
             }.get(button, None)
             if btn_name:
                 self.button_states[btn_name] = bool(state)
+    
+    def add_scroll(self, amount):
+        with self.lock:
+            self.scroll_queue.append(amount)
             
     def get_state(self):
         with self.lock:
-            return self.x, self.y, self.button_states.copy()
+            scrolls = sum(self.scroll_queue) if self.scroll_queue else 0
+            self.scroll_queue.clear()
+            return self.x, self.y, self.button_states.copy(), scrolls
             
     def run(self):
         prev_states = {'left': False, 'right': False, 'middle': False}
         while self.running:
             if self.active:
-                x, y, curr_states = self.get_state()
+                x, y, curr_states, scroll_amount = self.get_state()
                 
-                # Movimento seguro
+                # Movimento
                 try:
                     pyautogui.moveTo(x, y, _pause=False)
                 except Exception as e:
@@ -66,6 +72,13 @@ class MouseController:
                             print(f"[Erro] Clique {btn}: {e}")
                         finally:
                             prev_states[btn] = curr_states[btn]
+                
+                # Scroll
+                if scroll_amount:
+                    try:
+                        pyautogui.scroll(scroll_amount, _pause=False)
+                    except Exception as e:
+                        print(f"[Erro] Scroll: {e}")
             
             time.sleep(0.001)
 
@@ -82,12 +95,10 @@ def get_local_ip():
 local_ip = get_local_ip()
 print(f"[Windows] IP: {local_ip}:{PORT}")
 
-# Configuração UDP
 sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 sock.bind((HOST, PORT))
 sock.setsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF, 65536)
 
-# Inicializa controlador
 controller = MouseController()
 mouse_thread = Thread(target=controller.run)
 mouse_thread.daemon = True
@@ -121,7 +132,6 @@ try:
                 x, y = struct.unpack('!HH', data[1:5])
                 controller.update_position(x, y)
                 
-                # Verifica bordas com margem de segurança
                 screen_width, screen_height = pyautogui.size()
                 if (ENTRY_BORDER == "left" and x <= SAFE_BORDER) or \
                    (ENTRY_BORDER == "right" and x >= screen_width - SAFE_BORDER) or \
@@ -136,6 +146,12 @@ try:
                 controller.update_button(button, state)
             except Exception as e:
                 print(f"[Erro] Clique recebido: {e}")
+        elif msg_type == 4 and remote_mode:  # SCROLL
+            try:
+                amount = struct.unpack('!h', data[1:3])[0]
+                controller.add_scroll(amount)
+            except Exception as e:
+                print(f"[Erro] Scroll recebido: {e}")
             
 except KeyboardInterrupt:
     print("\n[Windows] Desligando...")

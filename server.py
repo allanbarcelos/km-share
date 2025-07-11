@@ -8,8 +8,9 @@ import socket
 import time
 import Quartz
 from pynput import keyboard
+from AppKit import NSCursor
 
-# Configuracoes
+# Configurações
 WINDOWS_HOST = '192.168.8.108'  # IP do Windows
 PORT = 5000
 EXIT_BORDER = 'left'  # "left", "right", "top", "bottom"
@@ -35,7 +36,7 @@ def on_key_press(key):
     if key == keyboard.Key.esc and REMOTE_MODE:
         print("[Mac] Saindo do modo remoto")
         REMOTE_MODE = False
-        # Reposicionar mouse no canto
+        NSCursor.unhide()  # Restaurar cursor
         Quartz.CGWarpMouseCursorPosition((SCREEN_WIDTH - 2, SCREEN_HEIGHT // 2))
         sock.sendall(b"EXIT_REMOTE\n")
 
@@ -57,22 +58,24 @@ while True:
                 print("[Mac] Entrando em modo remoto")
                 REMOTE_MODE = True
                 sock.sendall(b"ENTER_REMOTE\n")
+                NSCursor.hide()  # Ocultar cursor
                 time.sleep(0.1)  # tempo para o Windows ajustar o mouse
         else:
             # Envia coordenadas
             msg = f"MOVE:{x},{y}\n"
             sock.sendall(msg.encode())
 
-        # Verifica se recebeu comando de retorno do Windows
-        sock.settimeout(0.001)
-        try:
-            data = sock.recv(1024).decode().strip()
-            if data == "RETURN_CONTROL":
-                REMOTE_MODE = False
-                Quartz.CGWarpMouseCursorPosition((SCREEN_WIDTH - 2, SCREEN_HEIGHT // 2))
-                print("[Mac] Controle retornado pelo Windows")
-        except socket.timeout:
-            pass
+            # Verifica se recebeu comando de retorno do Windows
+            sock.settimeout(0.001)
+            try:
+                data = sock.recv(1024).decode().strip()
+                if data == "RETURN_CONTROL":
+                    REMOTE_MODE = False
+                    NSCursor.unhide()  # Restaurar cursor
+                    Quartz.CGWarpMouseCursorPosition((SCREEN_WIDTH - 2, SCREEN_HEIGHT // 2))
+                    print("[Mac] Controle retornado pelo Windows")
+            except socket.timeout:
+                pass
 
         time.sleep(0.01)
     except Exception as e:
